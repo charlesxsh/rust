@@ -749,6 +749,8 @@ fn construct_error<'a, 'tcx>(
             lint_root: hir_id,
             safety: Safety::Safe,
         }),
+        safety: true,
+        fn_safety: false,
     });
     let source_info = SourceInfo { span, scope: OUTERMOST_SOURCE_SCOPE };
 

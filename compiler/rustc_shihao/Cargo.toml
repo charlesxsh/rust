@@ -1,0 +1,21 @@
+[package]
+name = "rustc_shihao"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+tracing = "0.1"
+rustc_hir = { path = "../rustc_hir" }
+rustc_target = { path = "../rustc_target" }
+rustc_data_structures = { path = "../rustc_data_structures" }
+rustc_span = { path = "../rustc_span" }
+rustc_ast = { path = "../rustc_ast" }
+rustc_middle = { path = "../rustc_middle" }
+rustc_errors = { path = "../rustc_errors" }
+rustc_mir_dataflow = { path = "../rustc_mir_dataflow" }
+rustc_index = { path = "../rustc_index" }
+
+log = "0.4"
+pretty_env_logger = "0.3.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.34"
