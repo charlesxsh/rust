@@ -334,6 +334,7 @@ macro_rules! make_mir_visitor {
                     inlined,
                     inlined_parent_scope,
                     local_data: _,
+                    ..
                 } = scope_data;
 
                 self.visit_span(span);

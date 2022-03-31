@@ -32,6 +32,7 @@ rustc_serialize = { path = "../rustc_serialize" }
 rustc_ast = { path = "../rustc_ast" }
 rustc_span = { path = "../rustc_span" }
 rustc_typeck = { path = "../rustc_typeck" }
+rustc_shihao = { path = "../rustc_shihao" }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["consoleapi", "debugapi", "processenv"] }

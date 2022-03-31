@@ -786,6 +786,8 @@ impl<'a, 'tcx> Builder<'a, 'tcx> {
             parent_scope: Some(parent),
             inlined: None,
             inlined_parent_scope: None,
+            safety: scope_local_data.safety == Safety::Safe,
+            fn_safety: scope_local_data.safety != Safety::FnUnsafe,
             local_data: ClearCrossCrate::Set(scope_local_data),
         })
     }

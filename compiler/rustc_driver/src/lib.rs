@@ -28,6 +28,7 @@ use rustc_interface::{interface, Queries};
 use rustc_lint::LintStore;
 use rustc_log::stdout_isatty;
 use rustc_metadata::locator;
+use rustc_middle::ty::TyCtxt;
 use rustc_save_analysis as save;
 use rustc_save_analysis::DumpHandler;
 use rustc_serialize::json::ToJson;
@@ -127,6 +128,25 @@ impl Callbacks for TimePassesCallbacks {
         self.time_passes = config.opts.prints.is_empty()
             && (config.opts.debugging_opts.time_passes || config.opts.debugging_opts.time);
         config.opts.trimmed_def_paths = TrimmedDefPaths::GoodPath;
+    }
+
+    fn after_analysis<'tcx>(
+        &mut self,
+        compiler: &interface::Compiler,
+        queries: &'tcx rustc_interface::Queries<'tcx>,
+    ) -> Compilation {
+        queries.global_ctxt().unwrap().peek_mut().enter(|tcx| self.run_analysis(compiler, tcx));
+        Compilation::Continue
+    }
+}
+
+impl TimePassesCallbacks {
+    fn run_analysis<'tcx, 'compiler>(
+        &mut self,
+        _: &'compiler interface::Compiler,
+        tcx: TyCtxt<'tcx>,
+    ) {
+        rustc_shihao::run_analysis(tcx);
     }
 }
 

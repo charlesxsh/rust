@@ -226,6 +226,8 @@ fn new_body<'tcx>(
                 inlined: None,
                 inlined_parent_scope: None,
                 local_data: ClearCrossCrate::Clear,
+                safety: true,
+                fn_safety: false,
             },
             1,
         ),
