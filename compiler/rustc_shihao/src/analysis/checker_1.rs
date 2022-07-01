@@ -11,7 +11,7 @@ use rustc_hir::{
 use rustc_middle::mir::{ProjectionElem, Place, Local};
 use rustc_middle::{
     mir::{visit::Visitor, Body, ClearCrossCrate, Safety},
-    ty::{self, Ty, TyCtxt, TyS},
+    ty::{self, Ty, TyCtxt},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ impl RFAnalysis for Checker1RFAnalysis {
             .iter()
             .filter(|id| {
                 let hir = tcx.hir();
-                hir.body_owner_kind(hir.local_def_id_to_hir_id(**id)).is_fn_or_closure()
+                hir.body_owner_kind(**id).is_fn_or_closure()
             })
             .copied()
             .collect();
@@ -86,7 +86,7 @@ impl RFAnalysis for Checker1RFAnalysis {
                     match argt.kind() {
                         ty::TyKind::Ref(_, actualTy, _) => {
                             if !ty2funcs.contains_key(actualTy) {
-                                ty2funcs.insert(actualTy, HashSet::new());
+                                ty2funcs.insert(*actualTy, HashSet::new());
                             }
                             ty2funcs.get_mut(actualTy).unwrap().insert(*fn_id);
                         }
@@ -100,7 +100,7 @@ impl RFAnalysis for Checker1RFAnalysis {
             all_referenced_types.insert(return_ty);
 
             if item_name.starts_with("new") {
-                if !ty2news.contains_key(return_ty) {
+                if !ty2news.contains_key(&return_ty) {
                     ty2news.insert(return_ty, HashSet::new());
                 }
 
@@ -118,7 +118,7 @@ impl RFAnalysis for Checker1RFAnalysis {
                     //info!("is adt!");
 
                     let mut found = false;
-                    for (_, vardef) in adtdef.variants.iter_enumerated() {
+                    for (_, vardef) in adtdef.variants().iter_enumerated() {
                         for field in &vardef.fields {
                             //info!("checking field {:?}", field);
                             if field.ty(tcx, substs).is_unsafe_ptr() {
@@ -200,7 +200,7 @@ fn remove_reference_if(t: Ty) -> Option<Ty> {
     if t.is_ref() {
         match t.kind() {
             ty::TyKind::Ref(_, actualTy, _) => {
-                return Some(actualTy);
+                return Some(*actualTy);
             }
             _ => {}
         }

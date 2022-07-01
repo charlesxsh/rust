@@ -111,8 +111,6 @@ struct UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
     controller: &'c UnsafeSpreadAnalysis<'tcx, 'b>,
 }
 
-impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {}
-
 impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
     fn new(
         tcx: TyCtxt<'tcx>,
@@ -140,7 +138,7 @@ impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
     ) -> UnsafeSpreadAnalysisBodyResult<'tcx> {
         let locals: HashSet<Local> = cursor.get().iter().collect();
         let is_return_unsafe = match self.return_local {
-            Some(ret) => cursor.contains(ret),
+            Some(ret) => cursor.get().contains(ret),
             None => false,
         };
         UnsafeSpreadAnalysisBodyResult {
