@@ -4,6 +4,7 @@ use log::error;
 use rustc_hir::def_id::{DefId, LocalDefId};
 use rustc_span::sym::HashSet;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use crate::utils::{callgraph::{callgraph_analysis, CallGraph}, mir_body::{get_cnt_of_unsafe, get_cnt_of_ffi_call}};
 
@@ -96,8 +97,8 @@ impl RFAnalysis for ScoreFuzzEntryAnalysis {
 
 
                 // find ratio of each function and times with counts calculated previously
-                let fns_ratio = (callgraph.calls.get(entry_fn_id).unwrap_or(&default_hs), 1);
-                let mut worklist: VecDeque<(&HashSet<DefId>, i32)> = VecDeque::new();
+                let fns_ratio = (callgraph.calls.get(entry_fn_id).unwrap_or(&default_hs), 1 as f32);
+                let mut worklist: VecDeque<(&HashSet<DefId>, f32)> = VecDeque::new();
                 worklist.push_back(fns_ratio);
 
                 let mut fnid_ratios: HashMap<DefId, f32> = HashMap::new();
@@ -106,7 +107,7 @@ impl RFAnalysis for ScoreFuzzEntryAnalysis {
                     for fnid in fr.0 {
                         if !fnid_ratios.contains_key(fnid) {
                             fnid_ratios.insert(*fnid, fr.1 as f32);
-                            worklist.push_back((callgraph.calls.get(fnid).unwrap_or(&default_hs), fr.1/2));
+                            worklist.push_back((callgraph.calls.get(fnid).unwrap_or(&default_hs), fr.1 /(2 as f32) ));
                         }
                     }
                 }
@@ -114,6 +115,8 @@ impl RFAnalysis for ScoreFuzzEntryAnalysis {
                 for (fnid, ratio) in fnid_ratios.iter() {
                     let cnts = fn_cnts.get(fnid).unwrap();
                     result.score += ((cnts.0 as f32) + (cnts.1 as f32) *1.5) * ratio;
+                    info!("{:?} score {} ratio {}", fnid, (cnts.0 as f32) + (cnts.1 as f32), ratio);
+
                 }
 
             },

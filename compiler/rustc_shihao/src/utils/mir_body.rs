@@ -11,6 +11,14 @@ pub fn get_body_return_local<'tcx>(body: &Body<'tcx>) -> Option<Local> {
         .next()
 }
 
+pub fn get_body_arglocal_idx_pairs<'tcx>(body: &Body<'tcx>) -> Option<Vec<(usize, Local)>> {
+    if body.arg_count > 0 {
+        return Some(body.args_iter().enumerate().collect());
+    }
+
+
+    return None;
+}
 #[derive(Clone, Debug)]
 pub struct CallSite<'tcx> {
     pub bb: BasicBlock,

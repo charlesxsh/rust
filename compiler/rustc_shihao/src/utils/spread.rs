@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
 };
 
+use tracing::info;
 use rustc_hir::def_id::DefId;
 use rustc_index::bit_set::BitSet;
 use rustc_middle::{
@@ -12,20 +13,21 @@ use rustc_middle::{
     },
     ty::TyCtxt,
 };
-use rustc_mir_dataflow::{Analysis, CallReturnPlaces, ResultsCursor};
-use rustc_span::LineInfo;
+use rustc_mir_dataflow::{Analysis, CallReturnPlaces, ResultsCursor, ResultsVisitor};
+use rustc_span::{LineInfo, Span};
 use serde::{Deserialize, Serialize};
 
 use super::{
     alias::BodyAliasResult,
     callgraph::{CallGraph},
-    mir_body::{get_body_return_local, CallSite},
+    mir_body::{get_body_return_local, CallSite, get_body_arglocal_idx_pairs},
 };
 
 #[derive(Clone, Debug)]
 pub struct UnsafeSpreadAnalysisBodyResult<'tcx> {
-    pub unsafe_locals: HashSet<Local>,
+    pub unsafe_spans: Vec<Span>,
     pub is_return_unsafe: bool,
+    pub unsafe_tainted_argidxs: HashSet<usize>,
     pub callsites_with_unsafe_args: Vec<CallSiteWithUnsafeArg<'tcx>>,
 }
 
@@ -63,16 +65,27 @@ impl<'tcx, 'a> UnsafeSpreadAnalysis<'tcx, 'a> {
             }
         }
         let body = self.tcx.optimized_mir(body_id);
+        let callsites_with_unsafe_args: RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>> = RefCell::new(Vec::new());
         let mut analysis = UnsafeSpreadBodyAnalysis::new(
             self.tcx,
             body,
             self.alias_result,
             unsafe_arg_idxs.clone(),
+            callsites_with_unsafe_args.clone(),
             self,
         );
-        let ares =
-            analysis.into_engine(self.tcx, body).iterate_to_fixpoint().into_results_cursor(body);
-        let result = ares.analysis().get_result(&ares);
+
+        
+        let results = analysis.into_engine(self.tcx, body).iterate_to_fixpoint();
+        let mut visitor = UnsafeSpreadBodyResultVisitor::new(
+            get_body_return_local(body), 
+            get_body_arglocal_idx_pairs(body),
+            self.alias_result.get(&body_id)
+        );
+
+        results.visit_with(&body, body.basic_blocks().iter_enumerated().map(|(i, _)| i), &mut visitor);
+        //let result = ares.analysis().get_result(&ares);
+        let result = visitor.get_result(callsites_with_unsafe_args.borrow().clone());
         {
             let mut results_cache = self.results_cache.borrow_mut();
             results_cache.get_mut(&body_id).unwrap().insert(unsafe_arg_idxs.clone(), result);
@@ -93,11 +106,199 @@ fn is_statement_safe<'tcx, 'a>(body: &'a Body<'tcx>, statement: &'a Statement<'t
     return scope_data.safety;
 }
 
+struct UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
+    spans: Vec<Span>,
+    return_local: Option<Local>,
+    is_return_local_unsafe: bool,
+    // body's arg and index pair
+    argidx_pairs: Option<Vec<(usize, Local)>>,
+    // tainted body's arg (during the statements of the body)
+    tainted_argidxs: HashSet<usize>,
+    // find out any args(and their alias) are tainted by unsafe
+    alias_result: Option<&'b BodyAliasResult<'tcx>>
+}
+
+impl<'b, 'tcx> UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
+
+    // return_local is the return local variable in the given body
+    fn new(return_local: Option<Local>, argidx: Option<Vec<(usize, Local)>>, alias_result: Option<&'b BodyAliasResult<'tcx>>) -> Self  {
+        return Self { 
+            spans: Vec::new(), 
+            return_local, 
+            is_return_local_unsafe: false,
+            argidx_pairs: argidx,
+            tainted_argidxs: HashSet::new(),
+            alias_result
+        }
+    }
+
+    fn get_result(
+        &self,
+        callsites_with_unsafe_args: Vec<CallSiteWithUnsafeArg<'tcx>>
+    ) -> UnsafeSpreadAnalysisBodyResult<'tcx> {
+        UnsafeSpreadAnalysisBodyResult {
+            unsafe_spans: self.spans.clone(),
+            is_return_unsafe:self.is_return_local_unsafe,
+            unsafe_tainted_argidxs: self.tainted_argidxs.clone(),
+            callsites_with_unsafe_args,
+        }
+    }
+
+    fn check_if_args_tainted() {
+
+    }
+}
+
+
+impl<'mir,'tcx, 'b> ResultsVisitor< 'mir,'tcx> for  UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
+    type FlowState = BitSet<Local>;
+    
+
+    fn visit_statement_after_primary_effect(
+        &mut self,
+        _state: &Self::FlowState,
+        _statement: &'mir rustc_middle::mir::Statement<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+        match _statement.kind {
+            StatementKind::Assign(ref data) => {
+                let lhs = data.0;
+                let rhs = &data.1;
+                let mut is_lhs_unsafe = false;
+                let mut is_rhs_unsafe = false;
+
+                if _state.contains(lhs.local) {
+                    is_lhs_unsafe = true;
+                    if let Some(ret) = self.return_local {
+                        if ret == lhs.local {
+                            self.is_return_local_unsafe = true;
+                        }
+                    }
+
+                    if let Some(args) = &self.argidx_pairs {
+                        if let Some(alias_result) = self.alias_result {
+                            for idxarg in args {
+                                let is_arg_alias = alias_result
+                                .local_alias
+                                .get(&lhs.local)
+                                .into_iter()
+                                .flat_map(|bs| bs.iter())
+                                .any(|l| *l == idxarg.1);
+    
+                                if is_arg_alias {
+                                    info!("visitor: found unsafe tained the arg idx {}", idxarg.0);
+                                    self.tainted_argidxs.insert(idxarg.0);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                    }
+                } else {
+                    match rhs {
+                        Rvalue::Use(op) => match op {
+                            Operand::Copy(p) => {
+                                if _state.contains(p.local) {
+                                    is_rhs_unsafe = true;
+                                }
+                                if let Some(ret) = self.return_local {
+                                    if ret == p.local {
+                                        self.is_return_local_unsafe = true;
+                                    }
+                                }
+                            }
+                            Operand::Move(p) => {
+                                if _state.contains(p.local) {
+                                    is_rhs_unsafe = true;
+                                }
+                                if let Some(ret) = self.return_local {
+                                    if ret == p.local {
+                                        self.is_return_local_unsafe = true;
+                                    }
+                                }
+                            }
+                            Operand::Constant(_) => {}
+                        },
+                        Rvalue::Ref(_, _, p) => {
+                            if _state.contains(p.local) {
+                                is_rhs_unsafe = true;
+                            }
+                            if let Some(ret) = self.return_local {
+                                if ret == p.local {
+                                    self.is_return_local_unsafe = true;
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+    
+                }
+
+                
+                if is_rhs_unsafe || is_lhs_unsafe {
+                    self.spans.push(_statement.source_info.span);
+                    info!("visitor: found unsafe stmt: {:?}", _statement);
+                }
+
+                if self.is_return_local_unsafe {
+                    info!("visitor: found unsafe at return");
+
+                }
+            },
+            _ => {}
+        }
+
+    }
+
+    fn visit_block_start(
+        &mut self,
+        _state: &Self::FlowState,
+        _block_data: &'mir rustc_middle::mir::BasicBlockData<'tcx>,
+        _block: BasicBlock,
+    ) {
+    }
+
+    fn visit_statement_before_primary_effect(
+        &mut self,
+        _state: &Self::FlowState,
+        _statement: &'mir rustc_middle::mir::Statement<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+    }
+
+    fn visit_terminator_before_primary_effect(
+        &mut self,
+        _state: &Self::FlowState,
+        _terminator: &'mir rustc_middle::mir::Terminator<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+    }
+
+    fn visit_terminator_after_primary_effect(
+        &mut self,
+        _state: &Self::FlowState,
+        _terminator: &'mir rustc_middle::mir::Terminator<'tcx>,
+        _location: rustc_middle::mir::Location,
+    ) {
+        
+    }
+
+    fn visit_block_end(
+        &mut self,
+        _state: &Self::FlowState,
+        _block_data: &'mir rustc_middle::mir::BasicBlockData<'tcx>,
+        _block: BasicBlock,
+    ) {
+    }
+}
+
+
 #[derive(Clone, Debug)]
 pub struct CallSiteWithUnsafeArg<'tcx> {
     pub callsite: CallSite<'tcx>,
     pub unsafe_arg_idxs: Vec<usize>,
 }
+
 
 struct UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
     tcx: TyCtxt<'tcx>,
@@ -117,6 +318,7 @@ impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
         body: &'a Body<'tcx>,
         alias_result: &'b HashMap<DefId, BodyAliasResult<'tcx>>,
         unsafe_arg_idxs: Vec<usize>,
+        callsites_with_unsafe_args: RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>,
         controller: &'c UnsafeSpreadAnalysis<'tcx, 'b>,
     ) -> Self {
         Self {
@@ -124,27 +326,11 @@ impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
             body,
             alias_result,
             body_id: body.source.def_id(),
-            callsites_with_unsafe_args: RefCell::new(Vec::new()),
+            callsites_with_unsafe_args,
             unsafe_arg_idxs,
             controller,
             callgraph: controller.callgraph,
             return_local: get_body_return_local(body),
-        }
-    }
-
-    fn get_result(
-        &self,
-        cursor: &ResultsCursor<'_, 'tcx, Self>,
-    ) -> UnsafeSpreadAnalysisBodyResult<'tcx> {
-        let locals: HashSet<Local> = cursor.get().iter().collect();
-        let is_return_unsafe = match self.return_local {
-            Some(ret) => cursor.get().contains(ret),
-            None => false,
-        };
-        UnsafeSpreadAnalysisBodyResult {
-            unsafe_locals: locals,
-            is_return_unsafe,
-            callsites_with_unsafe_args: self.callsites_with_unsafe_args.borrow().clone(),
         }
     }
 }
@@ -190,32 +376,6 @@ impl<'tcx, 'a, 'b, 'c> Analysis<'tcx> for UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b,
 
                 if !stmt_safe {
                     state.insert(lhs.local);
-                    return;
-                }
-
-                match rhs {
-                    Rvalue::Use(op) => match op {
-                        Operand::Copy(p) => {
-                            if state.contains(p.local) {
-                                is_rhs_safe = false;
-                            }
-                        }
-                        Operand::Move(p) => {
-                            if state.contains(p.local) {
-                                is_rhs_safe = false;
-                            }
-                        }
-                        Operand::Constant(_) => {}
-                    },
-                    Rvalue::Ref(_, _, p) => {
-                        if state.contains(p.local) {
-                            is_rhs_safe = false;
-                        }
-                    }
-                    _ => {}
-                }
-                if !is_rhs_safe {
-                    state.insert(lhs.local);
                     self.alias_result
                         .get(&self.body_id)
                         .unwrap()
@@ -224,7 +384,45 @@ impl<'tcx, 'a, 'b, 'c> Analysis<'tcx> for UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b,
                         .into_iter()
                         .flat_map(|bs| bs.iter())
                         .all(|l| state.insert(*l));
+                    
+                    return;
+                } else {
+                    match rhs {
+                        Rvalue::Use(op) => match op {
+                            Operand::Copy(p) => {
+                                if state.contains(p.local) {
+                                    is_rhs_safe = false;
+                                }
+                            }
+                            Operand::Move(p) => {
+                                if state.contains(p.local) {
+                                    is_rhs_safe = false;
+                                }
+                            }
+                            Operand::Constant(_) => {}
+                        },
+                        Rvalue::Ref(_, _, p) => {
+                            if state.contains(p.local) {
+                                is_rhs_safe = false;
+                            }
+                        }
+                        _ => {}
+                    }
+                    if !is_rhs_safe {
+    
+                        state.insert(lhs.local);
+                        self.alias_result
+                            .get(&self.body_id)
+                            .unwrap()
+                            .local_alias
+                            .get(&lhs.local)
+                            .into_iter()
+                            .flat_map(|bs| bs.iter())
+                            .all(|l| state.insert(*l));
+                    }
                 }
+
+                
             }
 
             _ => {}
@@ -274,28 +472,55 @@ impl<'tcx, 'a, 'b, 'c> Analysis<'tcx> for UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b,
             }
         }
 
-        if unsafe_arg_idxs.len() > 0 {
-            self.callsites_with_unsafe_args.borrow_mut().push(CallSiteWithUnsafeArg {
-                callsite: c.clone(),
-                unsafe_arg_idxs: unsafe_arg_idxs.clone(),
-            });
-            let result = self.controller.analyze(c.callee.def_id(), unsafe_arg_idxs);
-            if result.is_return_unsafe {
-                match ret {
-                    CallReturnPlaces::Call(rlocal) => {
-                        state.insert(rlocal.local);
-                        self.alias_result
+        info!("checking callsite {:?}", c.callee.def_id());
+        self.callsites_with_unsafe_args.borrow_mut().push(CallSiteWithUnsafeArg {
+            callsite: c.clone(),
+            unsafe_arg_idxs: unsafe_arg_idxs.clone(),
+        });
+        let result = self.controller.analyze(c.callee.def_id(), unsafe_arg_idxs);
+        if result.is_return_unsafe {
+
+            match ret {
+                CallReturnPlaces::Call(rlocal) => {
+                    state.insert(rlocal.local);
+                    self.alias_result
+                        .get(&self.body_id)
+                        .unwrap()
+                        .local_alias
+                        .get(&rlocal.local)
+                        .into_iter()
+                        .flat_map(|bs| bs.iter())
+                        .all(|l| state.insert(*l));
+                }
+                CallReturnPlaces::InlineAsm(_) => {}
+            }
+        }
+        for argidx in result.unsafe_tainted_argidxs {
+            for (idx, opr) in c.args.iter().enumerate() {
+                if argidx == idx {
+                    info!("checking callsite {:?}: found arg {} has been tained", c.callee.def_id(), idx);
+
+                    match opr {
+                        Operand::Copy(p) => {
+                            // if an arg is passed by copy and then tainted, no harm
+                        }
+                        Operand::Move(p) => {
+                            self.alias_result
                             .get(&self.body_id)
                             .unwrap()
                             .local_alias
-                            .get(&rlocal.local)
+                            .get(&p.local)
                             .into_iter()
                             .flat_map(|bs| bs.iter())
                             .all(|l| state.insert(*l));
+                        }
+                        Operand::Constant(_) => {}
                     }
-                    CallReturnPlaces::InlineAsm(_) => {}
+                    
+                    break;
                 }
             }
         }
+        
     }
 }

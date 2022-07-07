@@ -20,6 +20,8 @@ use crate::utils::{
 use super::{find_main_func, AnalysisOption};
 use super::{ty::RFAnalysis, NoEntryFound};
 
+use tracing::{info};
+
 #[derive(Deserialize, Serialize)]
 struct UnsafeSpreadRFAnalysisResult {
     fns: Vec<UnsafeSpansWithFuncContext>,
@@ -56,7 +58,7 @@ impl RFAnalysis for UnsafeSpreadRFAnalysis {
                 // alias analysis
                 for fn_id in &callgraph.all_funcs {
                     let body = tcx.optimized_mir(*fn_id);
-
+                   
                     let mut visiter = BodyAliasVisitor::new(tcx, body, false);
 
                     visiter.visit_body(body);
@@ -66,6 +68,11 @@ impl RFAnalysis for UnsafeSpreadRFAnalysis {
 
                 let analysis = UnsafeSpreadAnalysis::new(tcx, &body_alias_results, &callgraph);
                 for fn_id in &callgraph.all_funcs {
+                    let fn_name = match tcx.opt_item_name(*fn_id) {
+                        Some(item) => Some(item.as_str().to_string()),
+                        None => None,
+                    };
+                    info!("analyze {:?}", fn_name);
                     analysis.analyze(*fn_id, vec![]);
                 }
                 let result = unsafe_spread_analysis_to_result(tcx, &analysis);
@@ -98,38 +105,9 @@ fn unsafe_spread_analysis_to_result<'tcx>(
                 calls_with_unsafe_args: Vec::new(),
             };
 
-            for (bb, bb_data) in body.basic_blocks().iter_enumerated() {
-                for stmt in &bb_data.statements {
-                    let mut unsafe_local_involved: bool = match stmt.kind {
-                        StatementKind::Assign(ref data) => {
-                            let lhs = data.0;
-                            let rhs = &data.1;
-                            if func_result.unsafe_locals.contains(&lhs.local) {
-                                true
-                            } else {
-                                match rhs {
-                                    Rvalue::Use(op) => match op {
-                                        Operand::Copy(p) => {
-                                            func_result.unsafe_locals.contains(&p.local)
-                                        }
-
-                                        Operand::Move(p) => {
-                                            func_result.unsafe_locals.contains(&p.local)
-                                        }
-                                        Operand::Constant(_) => false,
-                                    },
-                                    Rvalue::Ref(_, _, p) => false,
-                                    _ => false,
-                                }
-                            }
-                        }
-                        _ => false,
-                    };
-                    if unsafe_local_involved {
-                        let stmt_span_str = span_str(&stmt.source_info.span, true).unwrap();
-                        func_ctx.spans.push(stmt_span_str);
-                    }
-                }
+            for unsafe_span in &func_result.unsafe_spans {
+                let stmt_span_str = span_str(unsafe_span, true).unwrap();
+                func_ctx.spans.push(stmt_span_str);
             }
 
             for call in &func_result.callsites_with_unsafe_args {
