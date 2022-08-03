@@ -33,8 +33,8 @@ struct UnsafeSpansWithFuncContext {
     def_span: Option<String>,
     unsafe_args: Vec<usize>,
     spans: Vec<String>,
-    // call span, callee_def_span, unsafe_args
-    calls_with_unsafe_args: Vec<(String, String, Vec<usize>)>,
+    // call span, unsafe_args
+    calls_with_unsafe_args: Vec<(String, Vec<usize>)>,
 }
 
 pub struct UnsafeSpreadRFAnalysis {}
@@ -111,10 +111,8 @@ fn unsafe_spread_analysis_to_result<'tcx>(
             }
 
             for call in &func_result.callsites_with_unsafe_args {
-                let callee_span = &tcx.optimized_mir(call.callsite.callee.def_id()).span;
                 func_ctx.calls_with_unsafe_args.push((
                     span_str(&call.callsite.span, true).unwrap(),
-                    span_str(callee_span, true).unwrap(),
                     call.unsafe_arg_idxs.clone(),
                 ))
             }

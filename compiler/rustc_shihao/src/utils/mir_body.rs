@@ -43,7 +43,7 @@ pub fn resolve_callsite<'tcx>(
     // Only consider direct calls to functions
     let terminator = bb_data.terminator();
     let scope_data = &caller_body.source_scopes[terminator.source_info.scope];
-    if let TerminatorKind::Call { ref args, ref func, ref destination, .. } = terminator.kind {
+    if let TerminatorKind::Call { ref args, ref func, ref destination, ref fn_span, .. } = terminator.kind {
         let func_ty = func.ty(caller_body, tcx);
         if let FnDef(def_id, substs) = *func_ty.kind() {
             // To resolve an instance its substs have to be fully normalized.
@@ -75,7 +75,7 @@ pub fn resolve_callsite<'tcx>(
                 fn_sig,
                 args: args.clone(),
                 bb,
-                span: terminator.source_info.span,
+                span: *fn_span,
                 call_by_type,
                 in_unsafe:!scope_data.safety
             });

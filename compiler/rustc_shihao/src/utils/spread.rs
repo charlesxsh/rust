@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque}, rc::Rc,
 };
 
 use tracing::info;
@@ -65,7 +65,7 @@ impl<'tcx, 'a> UnsafeSpreadAnalysis<'tcx, 'a> {
             }
         }
         let body = self.tcx.optimized_mir(body_id);
-        let callsites_with_unsafe_args: RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>> = RefCell::new(Vec::new());
+        let callsites_with_unsafe_args: Rc<RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>> = Rc::new(RefCell::new(Vec::new()));
         let mut analysis = UnsafeSpreadBodyAnalysis::new(
             self.tcx,
             body,
@@ -305,7 +305,7 @@ struct UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
     body: &'a Body<'tcx>,
     body_id: DefId,
     alias_result: &'b HashMap<DefId, BodyAliasResult<'tcx>>,
-    callsites_with_unsafe_args: RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>,
+    callsites_with_unsafe_args: Rc<RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>>,
     return_local: Option<Local>,
     unsafe_arg_idxs: Vec<usize>,
     callgraph: &'c CallGraph<'tcx>,
@@ -318,7 +318,7 @@ impl<'tcx, 'a, 'b, 'c> UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b, 'c> {
         body: &'a Body<'tcx>,
         alias_result: &'b HashMap<DefId, BodyAliasResult<'tcx>>,
         unsafe_arg_idxs: Vec<usize>,
-        callsites_with_unsafe_args: RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>,
+        callsites_with_unsafe_args: Rc<RefCell<Vec<CallSiteWithUnsafeArg<'tcx>>>>,
         controller: &'c UnsafeSpreadAnalysis<'tcx, 'b>,
     ) -> Self {
         Self {
