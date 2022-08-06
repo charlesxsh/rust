@@ -35,6 +35,7 @@ use tracing::debug;
 pub struct Builder<'a, 'll, 'tcx> {
     pub llbuilder: &'ll mut llvm::Builder<'ll>,
     pub cx: &'a CodegenCx<'ll, 'tcx>,
+    pub shihao_ext: Option<ShihaoBuildExt>
 }
 
 impl Drop for Builder<'_, '_, '_> {
@@ -677,6 +678,10 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 let node = llvm::LLVMMDNodeInContext(self.cx.llcx, &one, 1);
                 llvm::LLVMSetMetadata(store, llvm::MD_nontemporal as c_uint, node);
             }
+
+            if let Some(ext) =  self.shihao_ext() {
+
+            }
             store
         }
     }
@@ -700,6 +705,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             // LLVM requires the alignment of atomic stores to be at least the size of the type.
             llvm::LLVMSetAlignment(store, size.bytes() as c_uint);
         }
+        
     }
 
     fn gep(&mut self, ty: &'ll Type, ptr: &'ll Value, indices: &[&'ll Value]) -> &'ll Value {
@@ -1192,6 +1198,14 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         let noinline = llvm::AttributeKind::NoInline.create_attr(self.llcx);
         attributes::apply_to_callsite(llret, llvm::AttributePlace::Function, &[noinline]);
     }
+
+    fn shihao_ext(&self) -> Option<ShihaoBuildExt> {
+        self.shihao_ext
+    }
+
+    fn set_shihao_ext(&mut self, ext: &ShihaoBuildExt) {
+        self.shihao_ext = Some(ext.clone());
+    }
 }
 
 impl<'ll> StaticBuilderMethods for Builder<'_, 'll, '_> {
@@ -1205,7 +1219,7 @@ impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
     fn with_cx(cx: &'a CodegenCx<'ll, 'tcx>) -> Self {
         // Create a fresh builder from the crate context.
         let llbuilder = unsafe { llvm::LLVMCreateBuilderInContext(cx.llcx) };
-        Builder { llbuilder, cx }
+        Builder { llbuilder, cx, shihao_ext: None }
     }
 
     pub fn llfn(&self) -> &'ll Value {

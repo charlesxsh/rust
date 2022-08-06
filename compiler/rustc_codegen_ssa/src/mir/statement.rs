@@ -8,8 +8,16 @@ use crate::traits::*;
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
     pub fn codegen_statement(&mut self, mut bx: Bx, statement: &mir::Statement<'tcx>) -> Bx {
         debug!("codegen_statement(statement={:?})", statement);
+        // Shihao
+        let xsh_spread = bx.tcx().xsh_spread().borrow();
 
         self.set_debug_loc(&mut bx, statement.source_info);
+        let ext = &ShihaoBuildExt {
+            unsafe_stmt: false,
+            unsafe_spread: false,
+            replace_instrumented_call: false
+        };
+        bx.set_shihao_ext(ext);
         match statement.kind {
             mir::StatementKind::Assign(box (ref place, ref rvalue)) => {
                 if let Some(index) = place.as_local() {

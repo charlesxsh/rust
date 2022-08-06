@@ -90,6 +90,11 @@ impl<'tcx, 'a> UnsafeSpreadAnalysis<'tcx, 'a> {
             let mut results_cache = self.results_cache.borrow_mut();
             results_cache.get_mut(&body_id).unwrap().insert(unsafe_arg_idxs.clone(), result);
         }
+
+        self.tcx.xsh_spread()
+        .borrow_mut()
+        .insert(body_id, Vec::new());
+        
         return self
             .results_cache
             .borrow()
@@ -367,7 +372,7 @@ impl<'tcx, 'a, 'b, 'c> Analysis<'tcx> for UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b,
         _: rustc_middle::mir::Location,
     ) {
         let stmt_safe = is_statement_safe(self.body, statement);
-
+        
         let mut is_rhs_safe = true;
         match statement.kind {
             StatementKind::Assign(ref data) => {

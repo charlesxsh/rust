@@ -1032,6 +1032,7 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         let mir = self.mir;
         let data = &mir[bb];
 
+        
         debug!("codegen_block({:?}={:?})", bb, data);
 
         for statement in &data.statements {

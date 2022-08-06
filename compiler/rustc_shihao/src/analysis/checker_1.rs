@@ -8,7 +8,7 @@ use rustc_hir::{
     def::DefKind,
     def_id::{DefId, LocalDefId},
 };
-use rustc_middle::mir::{ProjectionElem, Place, Local};
+use rustc_middle::mir::{ProjectionElem, Place, Local, Location};
 use rustc_middle::{
     mir::{visit::Visitor, Body, ClearCrossCrate, Safety},
     ty::{self, Ty, TyCtxt},

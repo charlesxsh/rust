@@ -9,7 +9,7 @@ use crate::middle::resolve_lifetime::{self, LifetimeScopeForPath};
 use crate::middle::stability;
 use crate::mir::interpret::{self, Allocation, ConstAllocation, ConstValue, Scalar};
 use crate::mir::{
-    Body, BorrowCheckResult, Field, Local, Place, PlaceElem, ProjectionKind, Promoted,
+    Body, BorrowCheckResult, Field, Local, Place, PlaceElem, ProjectionKind, Promoted, Statement,
 };
 use crate::thir::Thir;
 use crate::traits;
@@ -23,6 +23,7 @@ use crate::ty::{
     ParamConst, ParamTy, PolyFnSig, Predicate, PredicateKind, PredicateS, ProjectionTy, Region,
     RegionKind, ReprOptions, TraitObjectVisitor, Ty, TyKind, TyS, TyVar, TyVid, TypeAndMut, UintTy,
 };
+use crate::mir::Location;
 use rustc_ast as ast;
 use rustc_data_structures::fingerprint::Fingerprint;
 use rustc_data_structures::fx::{FxHashMap, FxHashSet};
@@ -64,7 +65,9 @@ use rustc_type_ir::TypeFlags;
 use smallvec::SmallVec;
 use std::any::Any;
 use std::borrow::Borrow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::collections::hash_map::{self, Entry};
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -1029,9 +1032,21 @@ pub struct GlobalCtxt<'tcx> {
     pub(crate) alloc_map: Lock<interpret::AllocMap<'tcx>>,
 
     output_filenames: Arc<OutputFilenames>,
+
+
+    /// Shihao
+    /// 
+    
+    pub xsh_spread: RefCell<HashMap<DefId, Vec<Statement<'tcx>>>>,
+
 }
 
 impl<'tcx> TyCtxt<'tcx> {
+
+    pub fn xsh_spread(self) -> &'tcx RefCell<HashMap<DefId, Vec<Statement<'tcx>>>> {
+        return &self.gcx.xsh_spread;
+    }
+
     pub fn typeck_opt_const_arg(
         self,
         def: ty::WithOptConstParam<LocalDefId>,
@@ -1171,6 +1186,7 @@ impl<'tcx> TyCtxt<'tcx> {
             data_layout,
             alloc_map: Lock::new(interpret::AllocMap::new()),
             output_filenames: Arc::new(output_filenames),
+            xsh_spread: Default::default()
         }
     }
 
