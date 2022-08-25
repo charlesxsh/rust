@@ -1,4 +1,5 @@
 use rustc_middle::mir;
+use rustc_middle::mir::Location;
 
 use super::FunctionCx;
 use super::LocalRef;
@@ -6,16 +7,43 @@ use crate::traits::BuilderMethods;
 use crate::traits::*;
 
 impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
-    pub fn codegen_statement(&mut self, mut bx: Bx, statement: &mir::Statement<'tcx>) -> Bx {
+    pub fn codegen_statement(&mut self, mut bx: Bx, statement: &mir::Statement<'tcx>, location: &Location) -> Bx {
         debug!("codegen_statement(statement={:?})", statement);
+        self.set_debug_loc(&mut bx, statement.source_info);
+
         // Shihao
         let xsh_spread = bx.tcx().xsh_spread().borrow();
+        let xsh_safe_store = bx.tcx().xsh_safe_stores().borrow();
+        // If this statment is in unsafe block
+        let scope_data = &self.mir.source_scopes[statement.source_info.scope];
+        let mut unsafe_spread = false;
+        let mut safe_store = true;
+        if let Some(stmts) = xsh_spread.get(&self.mir.source.def_id()) {
 
-        self.set_debug_loc(&mut bx, statement.source_info);
+            for s in stmts {
+                
+                if s == location {
+                    unsafe_spread = true;
+                    break;
+                }
+            }
+        } 
+
+        if let Some(stmts) = xsh_safe_store.get(&self.mir.source.def_id()) {
+
+            for s in stmts {
+                if s == location {
+                    safe_store = true;
+                    break;
+                }
+            }
+        }
+
         let ext = &ShihaoBuildExt {
-            unsafe_stmt: false,
-            unsafe_spread: false,
-            replace_instrumented_call: false
+            unsafe_stmt: !scope_data.safety,
+            unsafe_spread,
+            replace_instrumented_call: false,
+            safe_store
         };
         bx.set_shihao_ext(ext);
         match statement.kind {

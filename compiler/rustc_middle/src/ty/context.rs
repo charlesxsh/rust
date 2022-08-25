@@ -1037,14 +1037,18 @@ pub struct GlobalCtxt<'tcx> {
     /// Shihao
     /// 
     
-    pub xsh_spread: RefCell<HashMap<DefId, Vec<Statement<'tcx>>>>,
-
+    pub xsh_spread: RefCell<HashMap<DefId, Vec<Location>>>,
+    pub xsh_safe_stores: RefCell<HashMap<DefId, Vec<Location>>>
 }
 
 impl<'tcx> TyCtxt<'tcx> {
 
-    pub fn xsh_spread(self) -> &'tcx RefCell<HashMap<DefId, Vec<Statement<'tcx>>>> {
+    pub fn xsh_spread(self) -> &'tcx RefCell<HashMap<DefId, Vec<Location>>> {
         return &self.gcx.xsh_spread;
+    }
+
+    pub fn xsh_safe_stores(self) -> &'tcx RefCell<HashMap<DefId, Vec<Location>>> {
+        return &self.gcx.xsh_safe_stores;
     }
 
     pub fn typeck_opt_const_arg(
@@ -1186,7 +1190,8 @@ impl<'tcx> TyCtxt<'tcx> {
             data_layout,
             alloc_map: Lock::new(interpret::AllocMap::new()),
             output_filenames: Arc::new(output_filenames),
-            xsh_spread: Default::default()
+            xsh_spread: Default::default(),
+            xsh_safe_stores: Default::default()
         }
     }
 

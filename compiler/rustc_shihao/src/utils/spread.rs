@@ -9,7 +9,7 @@ use rustc_index::bit_set::BitSet;
 use rustc_middle::{
     mir::{
         BasicBlock, Body, ClearCrossCrate, Local, Operand, Rvalue, Safety, Statement,
-        StatementKind, TerminatorKind,
+        StatementKind, TerminatorKind, Location,
     },
     ty::TyCtxt,
 };
@@ -26,6 +26,7 @@ use super::{
 #[derive(Clone, Debug)]
 pub struct UnsafeSpreadAnalysisBodyResult<'tcx> {
     pub unsafe_spans: Vec<Span>,
+    pub unsafe_stmts: Vec<Location>,
     pub is_return_unsafe: bool,
     pub unsafe_tainted_argidxs: HashSet<usize>,
     pub callsites_with_unsafe_args: Vec<CallSiteWithUnsafeArg<'tcx>>,
@@ -86,14 +87,15 @@ impl<'tcx, 'a> UnsafeSpreadAnalysis<'tcx, 'a> {
         results.visit_with(&body, body.basic_blocks().iter_enumerated().map(|(i, _)| i), &mut visitor);
         //let result = ares.analysis().get_result(&ares);
         let result = visitor.get_result(callsites_with_unsafe_args.borrow().clone());
+
+        self.tcx.xsh_spread()
+        .borrow_mut()
+        .insert(body_id, result.unsafe_stmts.clone());
         {
             let mut results_cache = self.results_cache.borrow_mut();
             results_cache.get_mut(&body_id).unwrap().insert(unsafe_arg_idxs.clone(), result);
         }
 
-        self.tcx.xsh_spread()
-        .borrow_mut()
-        .insert(body_id, Vec::new());
         
         return self
             .results_cache
@@ -113,6 +115,7 @@ fn is_statement_safe<'tcx, 'a>(body: &'a Body<'tcx>, statement: &'a Statement<'t
 
 struct UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
     spans: Vec<Span>,
+    stmts: Vec<Location>,
     return_local: Option<Local>,
     is_return_local_unsafe: bool,
     // body's arg and index pair
@@ -120,7 +123,7 @@ struct UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
     // tainted body's arg (during the statements of the body)
     tainted_argidxs: HashSet<usize>,
     // find out any args(and their alias) are tainted by unsafe
-    alias_result: Option<&'b BodyAliasResult<'tcx>>
+    alias_result: Option<&'b BodyAliasResult<'tcx>>,
 }
 
 impl<'b, 'tcx> UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
@@ -129,6 +132,7 @@ impl<'b, 'tcx> UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
     fn new(return_local: Option<Local>, argidx: Option<Vec<(usize, Local)>>, alias_result: Option<&'b BodyAliasResult<'tcx>>) -> Self  {
         return Self { 
             spans: Vec::new(), 
+            stmts: Vec::new(),
             return_local, 
             is_return_local_unsafe: false,
             argidx_pairs: argidx,
@@ -143,6 +147,7 @@ impl<'b, 'tcx> UnsafeSpreadBodyResultVisitor<'b, 'tcx> {
     ) -> UnsafeSpreadAnalysisBodyResult<'tcx> {
         UnsafeSpreadAnalysisBodyResult {
             unsafe_spans: self.spans.clone(),
+            unsafe_stmts: self.stmts.clone(),
             is_return_unsafe:self.is_return_local_unsafe,
             unsafe_tainted_argidxs: self.tainted_argidxs.clone(),
             callsites_with_unsafe_args,
@@ -242,6 +247,7 @@ impl<'mir,'tcx, 'b> ResultsVisitor< 'mir,'tcx> for  UnsafeSpreadBodyResultVisito
                 
                 if is_rhs_unsafe || is_lhs_unsafe {
                     self.spans.push(_statement.source_info.span);
+                    self.stmts.push(_location);
                     info!("visitor: found unsafe stmt: {:?}", _statement);
                 }
 
@@ -477,7 +483,7 @@ impl<'tcx, 'a, 'b, 'c> Analysis<'tcx> for UnsafeSpreadBodyAnalysis<'tcx, 'a, 'b,
             }
         }
 
-        info!("checking callsite {:?}", c.callee.def_id());
+        // info!("checking callsite {:?}", c.callee.def_id());
         self.callsites_with_unsafe_args.borrow_mut().push(CallSiteWithUnsafeArg {
             callsite: c.clone(),
             unsafe_arg_idxs: unsafe_arg_idxs.clone(),

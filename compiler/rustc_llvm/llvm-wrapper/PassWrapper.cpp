@@ -755,7 +755,9 @@ LLVMRustOptimizeWithNewPassManager(
     LLVMRustSelfProfileBeforePassCallback BeforePassCallback,
     LLVMRustSelfProfileAfterPassCallback AfterPassCallback,
     const char *ExtraPasses, size_t ExtraPassesLen,
-    const char *LLVMPlugins, size_t LLVMPluginsLen) {
+    const char *LLVMPlugins, size_t LLVMPluginsLen,
+    bool SanitizerFirst
+    ) {
   Module *TheModule = unwrap(ModuleRef);
   TargetMachine *TM = unwrap(TMRef);
   OptimizationLevel OptLevel = fromRust(OptLevelRust);
@@ -951,20 +953,50 @@ LLVMRustOptimizeWithNewPassManager(
     // At the same time, the LTO pipelines do support O0 and using them is required.
     bool IsLTO = OptStage == LLVMRustOptStage::ThinLTO || OptStage == LLVMRustOptStage::FatLTO;
     if (OptLevel == OptimizationLevel::O0 && !IsLTO) {
+     
+     if(SanitizerFirst) {
+        for (const auto &C : OptimizerLastEPCallbacks)
+          PB.registerPipelineStartEPCallback(C);
+
+       for (const auto &C : PipelineStartEPCallbacks)
+        PB.registerPipelineStartEPCallback(C);
+     } else {
+
       for (const auto &C : PipelineStartEPCallbacks)
         PB.registerPipelineStartEPCallback(C);
+
       for (const auto &C : OptimizerLastEPCallbacks)
-        PB.registerOptimizerLastEPCallback(C);
+          PB.registerOptimizerLastEPCallback(C);
+
+       
+     }
+      
 
       // Pass false as we manually schedule ThinLTOBufferPasses below.
       MPM = PB.buildO0DefaultPipeline(OptLevel, /* PreLinkLTO */ false);
     } else {
-      for (const auto &C : PipelineStartEPCallbacks)
-        PB.registerPipelineStartEPCallback(C);
-      if (OptStage != LLVMRustOptStage::PreLinkThinLTO) {
-        for (const auto &C : OptimizerLastEPCallbacks)
-          PB.registerOptimizerLastEPCallback(C);
+
+      if(SanitizerFirst) {
+
+        if (OptStage != LLVMRustOptStage::PreLinkThinLTO) {
+
+          for (const auto &C : OptimizerLastEPCallbacks)
+            PB.registerPipelineStartEPCallback(C);
+        }
+
+        for (const auto &C : PipelineStartEPCallbacks)
+          PB.registerPipelineStartEPCallback(C);
+      } else {
+
+        for (const auto &C : PipelineStartEPCallbacks)
+          PB.registerPipelineStartEPCallback(C);
+
+       if (OptStage != LLVMRustOptStage::PreLinkThinLTO) {
+          for (const auto &C : OptimizerLastEPCallbacks)
+            PB.registerOptimizerLastEPCallback(C);
+        }
       }
+      
 
       switch (OptStage) {
       case LLVMRustOptStage::PreLinkNoLTO:

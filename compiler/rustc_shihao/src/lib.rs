@@ -26,6 +26,9 @@ pub fn run_analysis<'tcx>(tcx: TyCtxt<'tcx>) {
     if env::var("RF_SCORE_FUZZ_ENTRY").is_ok() {
         options.analyses.insert("score-fuzz-entry".to_string());
     }
+    if env::var("RF_SAFE_STORE").is_ok() {
+        options.analyses.insert("safe_store".to_string());
+    }
     options.unsafe_info_mode = env::var("RF_UNSAFE_INFO_MODE").ok();
 
     options.target_crate = env::var("RF_TARGET_CRATE").ok();
@@ -72,6 +75,10 @@ pub fn run_analysis<'tcx>(tcx: TyCtxt<'tcx>) {
     dispatcher.register_analysis(
         "checker-4",
         Box::new(analysis::checker_4::Checker4RFAnalysis {})
+    );
+    dispatcher.register_analysis(
+        "safe_store",
+        Box::new(analysis::safe_store::SafeStoreAnalysis {})
     );
     dispatcher.register_analysis("score-fuzz-entry", Box::new(analysis::score_fuzzentry::ScoreFuzzEntryAnalysis{}));
     match dispatcher.run(tcx) {

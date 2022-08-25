@@ -4,6 +4,7 @@ pub mod unsafe_spread;
 pub mod checker_1;
 pub mod checker_4;
 pub mod score_fuzzentry;
+pub mod safe_store;
 use crate::analysis::ty::RFAnalysis;
 use rustc_hir::def::DefKind;
 use rustc_hir::def_id::DefId;

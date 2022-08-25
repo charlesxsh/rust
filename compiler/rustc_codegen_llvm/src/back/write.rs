@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::slice;
 use std::str;
 use std::sync::Arc;
-
+use std::env;
 pub fn llvm_err(handler: &rustc_errors::Handler, msg: &str) -> FatalError {
     match llvm::last_error() {
         Some(err) => handler.fatal(&format!("{}: {}", msg, err)),
@@ -470,7 +470,7 @@ pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
     let extra_passes = config.passes.join(",");
 
     let llvm_plugins = config.llvm_plugins.join(",");
-
+    let sanitizer_first = env::var("SHIHAO_SANITIZER_FIRST").is_ok();
     // FIXME: NewPM doesn't provide a facility to pass custom InlineParams.
     // We would have to add upstream support for this first, before we can support
     // config.inline_threshold and our more aggressive default thresholds.
@@ -502,6 +502,7 @@ pub(crate) unsafe fn optimize_with_new_llvm_pass_manager(
         extra_passes.len(),
         llvm_plugins.as_ptr().cast(),
         llvm_plugins.len(),
+        sanitizer_first
     );
     result.into_result().map_err(|()| llvm_err(diag_handler, "failed to run LLVM passes"))
 }

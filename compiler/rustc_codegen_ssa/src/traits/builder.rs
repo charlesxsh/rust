@@ -36,7 +36,8 @@ pub struct ShihaoBuildExt {
     // unsafe spread?
     pub unsafe_spread: bool,
     // the call need to be replaced by instrumented version of function
-    pub replace_instrumented_call: bool
+    pub replace_instrumented_call: bool,
+    pub safe_store: bool
 }
 
 pub trait BuilderMethods<'a, 'tcx>:

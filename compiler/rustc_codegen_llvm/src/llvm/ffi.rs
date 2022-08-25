@@ -2351,6 +2351,7 @@ extern "C" {
         ExtraPassesLen: size_t,
         LLVMPlugins: *const c_char,
         LLVMPluginsLen: size_t,
+        SanitizerFirst: bool
     ) -> LLVMRustResult;
     pub fn LLVMRustPrintModule(
         M: &Module,

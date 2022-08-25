@@ -432,6 +432,9 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         unsafe {
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
             llvm::LLVMSetAlignment(load, align.bytes() as c_uint);
+            if let Some(ext) =  self.shihao_ext() {
+                self.shihao_handle_ext(load, &ext);
+            }
             load
         }
     }
@@ -440,6 +443,9 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         unsafe {
             let load = llvm::LLVMBuildLoad2(self.llbuilder, ty, ptr, UNNAMED);
             llvm::LLVMSetVolatile(load, llvm::True);
+            if let Some(ext) =  self.shihao_ext() {
+                self.shihao_handle_ext(load, &ext);
+            }
             load
         }
     }
@@ -461,6 +467,9 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             );
             // LLVM requires the alignment of atomic loads to be at least the size of the type.
             llvm::LLVMSetAlignment(load, size.bytes() as c_uint);
+            if let Some(ext) =  self.shihao_ext() {
+                self.shihao_handle_ext(load, &ext);
+            }
             load
         }
     }
@@ -680,7 +689,7 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
             }
 
             if let Some(ext) =  self.shihao_ext() {
-
+                self.shihao_handle_ext(store, &ext);
             }
             store
         }
@@ -1199,6 +1208,8 @@ impl<'a, 'll, 'tcx> BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         attributes::apply_to_callsite(llret, llvm::AttributePlace::Function, &[noinline]);
     }
 
+    
+
     fn shihao_ext(&self) -> Option<ShihaoBuildExt> {
         self.shihao_ext
     }
@@ -1216,6 +1227,58 @@ impl<'ll> StaticBuilderMethods for Builder<'_, 'll, '_> {
 }
 
 impl<'a, 'll, 'tcx> Builder<'a, 'll, 'tcx> {
+    fn shihao_handle_ext(&self, ins: &'ll Value, ext: &ShihaoBuildExt) {
+        if ext.unsafe_spread {
+            unsafe {
+                let key = "unsafe_s";
+                let kind = llvm::LLVMGetMDKindIDInContext(
+                    self.cx.llcx,
+                    key.as_ptr() as *const c_char,
+                    key.len() as c_uint,
+                );
+                llvm::LLVMSetMetadata(ins, kind, llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0));
+            }
+        } 
+
+        if ext.unsafe_stmt {
+            unsafe {
+                let key = "unsafe";
+                let kind = llvm::LLVMGetMDKindIDInContext(
+                    self.cx.llcx,
+                    key.as_ptr() as *const c_char,
+                    key.len() as c_uint,
+                );
+                llvm::LLVMSetMetadata(ins, kind, llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0));
+            }
+        }
+
+        if ext.replace_instrumented_call {
+            unsafe {
+                let key = "unsafe_c";
+                let kind = llvm::LLVMGetMDKindIDInContext(
+                    self.cx.llcx,
+                    key.as_ptr() as *const c_char,
+                    key.len() as c_uint,
+                );
+                llvm::LLVMSetMetadata(ins, kind, llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0));
+            }
+        }
+
+        if ext.safe_store {
+            unsafe {
+                let key = "safe_store";
+                let kind = llvm::LLVMGetMDKindIDInContext(
+                    self.cx.llcx,
+                    key.as_ptr() as *const c_char,
+                    key.len() as c_uint,
+                );
+                llvm::LLVMSetMetadata(ins, kind, llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0));
+            }
+        }
+        
+
+    }
+
     fn with_cx(cx: &'a CodegenCx<'ll, 'tcx>) -> Self {
         // Create a fresh builder from the crate context.
         let llbuilder = unsafe { llvm::LLVMCreateBuilderInContext(cx.llcx) };

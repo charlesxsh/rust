@@ -1,3 +1,5 @@
+use std::ops::Index;
+
 use super::operand::OperandRef;
 use super::operand::OperandValue::{Immediate, Pair, Ref};
 use super::place::PlaceRef;
@@ -13,7 +15,7 @@ use rustc_ast as ast;
 use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
 use rustc_hir::lang_items::LangItem;
 use rustc_index::vec::Idx;
-use rustc_middle::mir::AssertKind;
+use rustc_middle::mir::{AssertKind, Location};
 use rustc_middle::mir::{self, SwitchTargets};
 use rustc_middle::ty::layout::{HasTyCtxt, LayoutOf};
 use rustc_middle::ty::print::{with_no_trimmed_paths, with_no_visible_paths};
@@ -1032,11 +1034,13 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         let mir = self.mir;
         let data = &mir[bb];
 
-        
         debug!("codegen_block({:?}={:?})", bb, data);
 
-        for statement in &data.statements {
-            bx = self.codegen_statement(bx, statement);
+        for (idx, statement) in data.statements.iter().enumerate() {
+            bx = self.codegen_statement(bx, statement, &Location {
+                block: bb,
+                statement_index: idx,
+            });
         }
 
         self.codegen_terminator(bx, bb, data.terminator());
