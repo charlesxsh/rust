@@ -1,7 +1,8 @@
-use rustc_middle::{mir::{Body, Local, LocalKind, BasicBlockData, BasicBlock, TerminatorKind, Operand}, ty::{Instance, InstanceDef, Ty, TyCtxt, PolyFnSig}};
+use rustc_middle::{mir::{Body, Local, LocalKind, BasicBlockData, BasicBlock, TerminatorKind, Operand}, ty::{Instance, InstanceDef, Ty, TyCtxt, PolyFnSig, TyKind::{Closure, FnPtr}}};
 use rustc_span::Span;
 use rustc_middle::ty::FnDef;
 use rustc_middle::ty::subst::Subst;
+use tracing::info;
 
 pub fn get_body_return_local<'tcx>(body: &Body<'tcx>) -> Option<Local> {
     body.local_decls
@@ -44,8 +45,14 @@ pub fn resolve_callsite<'tcx>(
     let terminator = bb_data.terminator();
     let scope_data = &caller_body.source_scopes[terminator.source_info.scope];
     if let TerminatorKind::Call { ref args, ref func, ref destination, ref fn_span, .. } = terminator.kind {
+        info!("terminator call {:?}", terminator);
+
         let func_ty = func.ty(caller_body, tcx);
+        info!("ty {:?}", func_ty);
+
         if let FnDef(def_id, substs) = *func_ty.kind() {
+
+            info!("found fn def {:?}", def_id);
             // To resolve an instance its substs have to be fully normalized.
             let param_env =
                 tcx.param_env_reveal_all_normalized(caller_body.source.def_id());
@@ -53,11 +60,15 @@ pub fn resolve_callsite<'tcx>(
             let callee =
                 Instance::resolve(tcx, param_env, def_id, substs).ok().flatten()?;
 
+            info!("callee def {:?}", callee.def);
+
             if let InstanceDef::Virtual(..) | InstanceDef::Intrinsic(_) = callee.def {
+                
                 return None;
             }
 
             if ensure_callee_has_mir && !check_mir_is_available(tcx, caller_body, &callee).is_ok() {
+                info!("{:?} mir is unavailable", def_id);
                 return None
             }
 
@@ -80,8 +91,14 @@ pub fn resolve_callsite<'tcx>(
                 in_unsafe:!scope_data.safety
             });
         }
-    }
 
+
+        if let FnPtr(sig) = *func_ty.kind() {
+            info!("found fnptr {:?}", sig);
+            //TODO: find candidates from all functions & closures
+        }
+
+    }
     None
 }
 

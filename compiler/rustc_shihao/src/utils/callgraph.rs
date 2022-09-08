@@ -88,12 +88,7 @@ pub fn callgraph_analysis<'tcx, 'a>(
             match check_mir_is_available(tcx, body_to_visit, &cs.callee) {
                 Ok(()) => {}
                 Err(reason) => {
-                    // let callee_name = tcx.opt_item_name(callee_def_id);
-                    // let name = match callee_name {
-                    //     Some(ref cn) => cn.as_str(),
-                    //     None => ""
-                    // };
-                    //info!("MIR of {} is unavailable: {}", name, reason);                    
+                    info!("MIR of {:?} is unavailable: {}", callee_def_id, reason);                    
                     continue;
                 }
             }
