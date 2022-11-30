@@ -30,6 +30,7 @@ use tracing::debug;
 pub struct Builder<'a, 'll, 'tcx> {
     pub llbuilder: &'ll mut llvm::Builder<'ll>,
     pub cx: &'a CodegenCx<'ll, 'tcx>,
+    pub shihao_ext: Option<ShihaoBuildExt>
 }
 
 impl Drop for Builder<'a, 'll, 'tcx> {
@@ -116,6 +117,14 @@ macro_rules! builder_methods_for_value_instructions {
 }
 
 impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
+    fn shihao_ext(&self) -> Option<ShihaoBuildExt> {
+        self.shihao_ext
+    }
+
+    fn set_shihao_ext(&mut self, ext: &ShihaoBuildExt) {
+        self.shihao_ext = Some(ext.clone());
+    }
+
     fn new_block<'b>(cx: &'a CodegenCx<'ll, 'tcx>, llfn: &'ll Value, name: &'b str) -> Self {
         let mut bx = Builder::with_cx(cx);
         let llbb = unsafe {
@@ -129,7 +138,7 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
     fn with_cx(cx: &'a CodegenCx<'ll, 'tcx>) -> Self {
         // Create a fresh builder from the crate context.
         let llbuilder = unsafe { llvm::LLVMCreateBuilderInContext(cx.llcx) };
-        Builder { llbuilder, cx }
+        Builder { llbuilder, cx, shihao_ext: None }
     }
 
     fn build_sibling_block(&self, name: &str) -> Self {
@@ -407,6 +416,9 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
         unsafe {
             let load = llvm::LLVMBuildLoad(self.llbuilder, ptr, UNNAMED);
             llvm::LLVMSetAlignment(load, align.bytes() as c_uint);
+            if let Some(ext) =  self.shihao_ext() {
+                self.shihao_handle_ext(load, &ext);
+            }
             load
         }
     }
@@ -603,6 +615,9 @@ impl BuilderMethods<'a, 'tcx> for Builder<'a, 'll, 'tcx> {
                 let one = self.cx.const_i32(1);
                 let node = llvm::LLVMMDNodeInContext(self.cx.llcx, &one, 1);
                 llvm::LLVMSetMetadata(store, llvm::MD_nontemporal as c_uint, node);
+            }
+            if let Some(ext) =  self.shihao_ext() {
+                self.shihao_handle_ext(store, &ext);
             }
             store
         }
@@ -1196,6 +1211,22 @@ impl StaticBuilderMethods for Builder<'a, 'll, 'tcx> {
 }
 
 impl Builder<'a, 'll, 'tcx> {
+
+    fn shihao_handle_ext(&self, ins: &'ll Value, ext: &ShihaoBuildExt) {
+
+        if ext.unsafe_stmt {
+            unsafe {
+                let key = "unsafe";
+                let kind = llvm::LLVMGetMDKindIDInContext(
+                    self.cx.llcx,
+                    key.as_ptr() as *const c_char,
+                    key.len() as c_uint,
+                );
+                llvm::LLVMSetMetadata(ins, kind, llvm::LLVMMDNodeInContext(self.cx.llcx, ptr::null(), 0));
+            }
+        }
+    }
+
     pub fn llfn(&self) -> &'ll Value {
         unsafe { llvm::LLVMGetBasicBlockParent(self.llbb()) }
     }

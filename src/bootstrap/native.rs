@@ -251,6 +251,10 @@ impl Step for Llvm {
 
         let mut enabled_llvm_projects = Vec::new();
 
+        // Shihao: just for KLEE build
+        enabled_llvm_projects.push("clang");
+        enabled_llvm_projects.push("polly");
+
         if util::forcing_clang_based_tests() {
             enabled_llvm_projects.push("clang");
             enabled_llvm_projects.push("compiler-rt");

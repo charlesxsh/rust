@@ -1900,6 +1900,10 @@ pub struct SourceScopeData<'tcx> {
     /// Crate-local information for this source scope, that can't (and
     /// needn't) be tracked across crates.
     pub local_data: ClearCrossCrate<SourceScopeLocalData>,
+
+    /// Shihao
+    /// 
+    pub safe: bool,
 }
 
 #[derive(Clone, Debug, TyEncodable, TyDecodable, HashStable)]

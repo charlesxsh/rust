@@ -12,6 +12,14 @@ impl<'a, 'tcx, Bx: BuilderMethods<'a, 'tcx>> FunctionCx<'a, 'tcx, Bx> {
         debug!("codegen_statement(statement={:?})", statement);
 
         self.set_debug_loc(&mut bx, statement.source_info);
+
+        let scope_data = &self.mir.source_scopes[statement.source_info.scope];
+
+        let ext = &ShihaoBuildExt {
+            unsafe_stmt: !scope_data.safe
+        };
+        bx.set_shihao_ext(ext);
+
         match statement.kind {
             mir::StatementKind::Assign(box (ref place, ref rvalue)) => {
                 if let Some(index) = place.as_local() {

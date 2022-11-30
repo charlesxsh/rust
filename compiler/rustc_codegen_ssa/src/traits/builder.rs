@@ -28,6 +28,12 @@ pub enum OverflowOp {
     Mul,
 }
 
+#[derive(Copy, Clone)]
+pub struct ShihaoBuildExt {
+    // is from unsafe statement
+    pub unsafe_stmt: bool
+}
+
 pub trait BuilderMethods<'a, 'tcx>:
     HasCodegen<'tcx>
     + CoverageInfoBuilderMethods<'tcx>
@@ -40,6 +46,9 @@ pub trait BuilderMethods<'a, 'tcx>:
     + HasParamEnv<'tcx>
     + HasTargetSpec
 {
+    fn shihao_ext(&self) -> Option<ShihaoBuildExt>;
+    fn set_shihao_ext(&mut self, ext: &ShihaoBuildExt);
+    
     fn new_block<'b>(cx: &'a Self::CodegenCx, llfn: Self::Function, name: &'b str) -> Self;
     fn with_cx(cx: &'a Self::CodegenCx) -> Self;
     fn build_sibling_block(&self, name: &str) -> Self;
