@@ -145,7 +145,7 @@ top_level_options!(
         // `true` if we're emitting JSON blobs about each artifact produced
         // by the compiler.
         json_artifact_notifications: bool [TRACKED],
-
+        json_future_incompat: bool [TRACKED],
         pretty: Option<PpMode> [UNTRACKED],
     }
 );
