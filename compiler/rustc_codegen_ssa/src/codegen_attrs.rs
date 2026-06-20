@@ -82,6 +82,8 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
     }
 
     let rust_target_features = tcx.rust_target_features(LOCAL_CRATE);
+    let local_crate = tcx.crate_name(LOCAL_CRATE);
+    let downgrade_stdlib_inline_always = local_crate == sym::core || local_crate == sym::std;
 
     let mut inline_span = None;
     let mut link_ordinal_span = None;
@@ -483,7 +485,11 @@ fn codegen_fn_attrs(tcx: TyCtxt<'_>, did: LocalDefId) -> CodegenFnAttrs {
         };
 
         if item.has_name(sym::always) {
-            InlineAttr::Always
+            if downgrade_stdlib_inline_always {
+                InlineAttr::Hint
+            } else {
+                InlineAttr::Always
+            }
         } else if item.has_name(sym::never) {
             InlineAttr::Never
         } else {
